@@ -75,6 +75,8 @@ pub enum ErrorKind {
     NoDataFound,
     NotConnected,
     NotImplemented(String),
+    OperationNotSupportedOnBfile,
+    OperationOnlySupportedOnBfile,
     OutOfData,
     OutOfRange(String),
     ParseError(String, usize),
@@ -332,6 +334,12 @@ impl fmt::Display for Error {
             }
             ErrorKind::NotImplemented(feature) => {
                 write!(fmt, "not implemented: {}", feature)?
+            }
+            ErrorKind::OperationNotSupportedOnBfile => {
+                fmt.write_str("operation is not supported on BFILE LOBs")?
+            }
+            ErrorKind::OperationOnlySupportedOnBfile => {
+                fmt.write_str("operation is only supported on BFILE LOBs")?
             }
             ErrorKind::PemFileOperation => {
                 fmt.write_str("PEM file read operation failed")?
@@ -665,6 +673,14 @@ impl Error {
 
     pub(crate) fn not_implemented(feature: String) -> Error {
         Error::new(ErrorKind::NotImplemented(feature), None)
+    }
+
+    pub(crate) fn operation_not_supported_on_bfile() -> Error {
+        Error::new(ErrorKind::OperationNotSupportedOnBfile, None)
+    }
+
+    pub(crate) fn operation_only_supported_on_bfile() -> Error {
+        Error::new(ErrorKind::OperationOnlySupportedOnBfile, None)
     }
 
     pub(crate) fn out_of_data() -> Error {

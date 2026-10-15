@@ -197,6 +197,7 @@ impl Metadata {
             self.db_type.ora_type_num,
             constants::ORA_TYPE_NUM_BLOB
                 | constants::ORA_TYPE_NUM_CLOB
+                | constants::ORA_TYPE_NUM_BFILE
                 | constants::ORA_TYPE_NUM_JSON
                 | constants::ORA_TYPE_NUM_VECTOR
         )
@@ -216,6 +217,7 @@ impl Metadata {
                 self.db_type.ora_type_num,
                 constants::ORA_TYPE_NUM_CLOB
                     | constants::ORA_TYPE_NUM_BLOB
+                    | constants::ORA_TYPE_NUM_BFILE
                     | constants::ORA_TYPE_NUM_CURSOR
             )
     }

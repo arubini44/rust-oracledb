@@ -183,7 +183,9 @@ impl DbValue {
             constants::ORA_TYPE_NUM_JSON => {
                 Ok(resp.read_value_lob::<JsonValue>()?.map(DbValue::Json))
             }
-            constants::ORA_TYPE_NUM_CLOB | constants::ORA_TYPE_NUM_BLOB => {
+            constants::ORA_TYPE_NUM_CLOB
+            | constants::ORA_TYPE_NUM_BLOB
+            | constants::ORA_TYPE_NUM_BFILE => {
                 let data = PendingLobData::from_resp(resp, db_type)?;
                 resp.add_pending_db_value(data.map(PendingDbValue::Lob));
                 Ok(None)

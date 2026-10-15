@@ -300,10 +300,10 @@ pub const TTC_LOB_OP_OPEN: u32 = 0x8000;
 pub const TTC_LOB_OP_CLOSE: u32 = 0x10000;
 pub const TTC_LOB_OP_IS_OPEN: u32 = 0x11000;
 pub const TTC_LOB_OP_ARRAY: u32 = 0x80000;
-pub const _TTC_LOB_OP_FILE_EXISTS: u32 = 0x0800;
-pub const _TTC_LOB_OP_FILE_OPEN: u32 = 0x0100;
-pub const _TTC_LOB_OP_FILE_CLOSE: u32 = 0x0200;
-pub const _TTC_LOB_OP_FILE_ISOPEN: u32 = 0x0400;
+pub const TTC_LOB_OP_FILE_EXISTS: u32 = 0x0800;
+pub const TTC_LOB_OP_FILE_OPEN: u32 = 0x0100;
+pub const TTC_LOB_OP_FILE_CLOSE: u32 = 0x0200;
+pub const TTC_LOB_OP_FILE_ISOPEN: u32 = 0x0400;
 
 // LOB open modes
 pub const TTC_LOB_OPEN_READ_WRITE: u64 = 2;

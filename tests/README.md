@@ -41,6 +41,10 @@ suite.
 * `RSO_TEST_ADMIN_PASSWORD` provides the password of the DBA user which you
   used for testing.
 
+* `RSO_TEST_BFILE_SERVER_PATH` enables BFILE tests using an existing server folder
+  writable by the OS user running the database. The tests create and remove files through
+  `UTL_FILE` and create and drop their own DIRECTORY objects.
+
 Note: the test suite requires the schema to have these privileges: CREATE
 TABLE, CREATE SESSION, CREATE PROCEDURE, CREATE SEQUENCE, CREATE TRIGGER, and
 CREATE TYPE.  Certain tests require CREATE DOMAIN, CREATE VIEW privileges as
