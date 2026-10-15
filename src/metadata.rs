@@ -67,6 +67,8 @@ pub struct Metadata {
     vector_dimensions: u32,
     vector_flags: u8,
     object_type: Option<MetadataObjectType>,
+    domain: Option<(String, String)>,
+    annotations: Vec<(String, String)>,
 }
 
 impl Metadata {
@@ -98,6 +100,8 @@ impl Metadata {
             vector_dimensions: 0,
             vector_flags: 0,
             object_type: None,
+            domain: None,
+            annotations: Vec::new(),
         }
     }
 
@@ -133,6 +137,8 @@ impl Metadata {
             vector_dimensions: 0,
             vector_flags: 0,
             object_type: None,
+            domain: None,
+            annotations: Vec::new(),
         };
         let ora_type_num: u16 = resp.read_u8()?.into();
         resp.read_u8()?; // flags
@@ -171,16 +177,26 @@ impl Metadata {
         let _uds_flags = resp.read_ub4()?;
         if client.supports_ttc_field_version(constants::TTC_FIELD_VERSION_23_1)
         {
-            let _domain_schema = resp.read_utf8_with_double_length()?;
-            let _domain_name = resp.read_utf8_with_double_length()?;
+            let schema = resp.read_utf8_with_double_length()?.to_string();
+            let name = resp.read_utf8_with_double_length()?.to_string();
+            if !schema.is_empty() && !name.is_empty() {
+                metadata.domain = Some((schema, name));
+            }
         }
         if client.supports_ttc_field_version(
             constants::TTC_FIELD_VERSION_23_1_EXT_3,
-        ) {
+        ) && resp.read_ub4()? > 0
+        {
+            resp.read_u8()?;
             let num_annotations = resp.read_ub4()?;
-            if num_annotations > 0 {
-                todo!();
+            resp.read_u8()?;
+            for _ in 0..num_annotations {
+                let name = resp.read_utf8_with_double_length()?.to_string();
+                let value = resp.read_utf8_with_double_length()?.to_string();
+                metadata.annotations.push((name, value));
+                let _flags = resp.read_ub4()?;
             }
+            let _flags = resp.read_ub4()?;
         }
         if client.supports_ttc_field_version(constants::TTC_FIELD_VERSION_23_4)
         {
@@ -366,6 +382,13 @@ impl Metadata {
         }
     }
 
+    /// Returns the annotations of the column as a vector of name and value
+    /// pairs, in the order the database sent them. The slice is empty if the
+    /// column has no annotations.
+    pub fn annotations(&self) -> &[(String, String)] {
+        &self.annotations
+    }
+
     /// Returns the buffer size.
     pub fn buffer_size(&self) -> u32 {
         let buffer_size_factor: u32 =
@@ -426,6 +449,12 @@ impl Metadata {
     /// Returns the database type of the data.
     pub fn db_type(&self) -> &'static DbType {
         self.db_type
+    }
+
+    /// Returns the domain of the data, if applicable, as a 2-tuple containing
+    /// the schema and the name of the domain.
+    pub fn domain(&self) -> Option<(&str, &str)> {
+        self.domain.as_ref().map(|(a, b)| (a.as_str(), b.as_str()))
     }
 
     /// Returns whether the data refers to an array.

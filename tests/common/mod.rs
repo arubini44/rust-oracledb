@@ -233,6 +233,17 @@ pub fn skip_test(reason: &str) -> bool {
 }
 
 #[allow(dead_code)]
+/// Returns a boolean indicating if the connection can be used for testing
+/// domains and annotations on table columns.
+pub fn skip_unless_domains_supported(conn: &oracledb::Connection) -> bool {
+    if is_db_min_version(conn, 23, 0) {
+        false
+    } else {
+        skip_test("database does not support domains (requires 23+)")
+    }
+}
+
+#[allow(dead_code)]
 /// Returns a boolean indicating if the connection can be used for performing
 /// tests with native booleans (requires Oracle Database 23 or higher).
 pub fn skip_unless_native_boolean_supported(

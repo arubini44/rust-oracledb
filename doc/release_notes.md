@@ -7,6 +7,9 @@
 1.  Added support for specifying the transport connect timeout and ensure it is
     actually used when establishing a connection to the database
     ([issue 35](https://github.com/oracle/rust-oracledb/issues/35)).
+1.  Added support for getting the domain and any annotations from columns that
+    support them
+    ([issue 48](https://github.com/oracle/rust-oracledb/issues/48)).
 1.  Fixed bug causing bind variables to be detected within DDL statements
     ([issue 33](https://github.com/oracle/rust-oracledb/issues/33)).
 1.  Fixed issue with encoding integers with trailing zeros
