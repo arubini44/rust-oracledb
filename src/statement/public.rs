@@ -49,6 +49,7 @@ use crate::row::Row;
 pub struct Statement {
     client_ref: ClientRef,
     statement: CachedStatement,
+    return_on_drop: bool,
 }
 
 impl Statement {
@@ -80,6 +81,17 @@ impl Statement {
         )
     }
 
+    /// Transfers the cached statement; the caller must return it to the client.
+    pub(crate) fn into_cached_statement(mut self) -> CachedStatement {
+        let empty = CachedStatement::create_empty(
+            String::new(),
+            false,
+            self.statement.options(),
+        );
+        self.return_on_drop = false;
+        std::mem::replace(&mut self.statement, empty)
+    }
+
     /// Creates a new public facing statement from the internal cached
     /// statement.
     pub(crate) fn new(
@@ -89,6 +101,7 @@ impl Statement {
         Self {
             client_ref,
             statement,
+            return_on_drop: true,
         }
     }
 
@@ -276,7 +289,8 @@ impl Statement {
 
 impl Drop for Statement {
     fn drop(&mut self) {
-        if let Ok(mut client) = self.client_ref.lock() {
+        if self.return_on_drop {
+            let mut client = self.client_ref.lock().unwrap();
             client.return_statement(&self.statement);
         }
     }

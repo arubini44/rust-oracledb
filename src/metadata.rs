@@ -28,9 +28,12 @@
 // Defines the structure representing column/bind metadata.
 //-----------------------------------------------------------------------------
 
+use std::sync::Arc;
+
 use crate::client::Client;
 use crate::constants;
 use crate::db_type::DbType;
+use crate::dbobject::{DbObjectType, DbObjectTypeIdentity};
 use crate::error::Error;
 use crate::response::Response;
 use crate::vector::VectorStorageFormat;
@@ -40,7 +43,16 @@ use crate::write_buffer::WriteBuffer;
 const VECTOR_META_FLAG_FLEXIBLE_DIM: u8 = 0x01;
 const VECTOR_META_FLAG_SPARSE_VECTOR: u8 = 0x02;
 
-/// Represents the metadata of columns fetched from the database.
+/// An object type awaiting discovery or its shared type handle.
+#[derive(Clone, Debug)]
+enum MetadataObjectType {
+    Pending(DbObjectTypeIdentity),
+    Resolved(Arc<DbObjectType>),
+}
+
+/// Represents the metadata of data fetched from the database or data that will
+/// be sent to the database (columns, bind variables, database object
+/// attributes, database collection elements).
 #[derive(Clone, Debug)]
 pub struct Metadata {
     name: String,
@@ -54,14 +66,18 @@ pub struct Metadata {
     vector_storage_format: Option<VectorStorageFormat>,
     vector_dimensions: u32,
     vector_flags: u8,
+    object_type: Option<MetadataObjectType>,
 }
 
 impl Metadata {
     /// Returns a new structure with the given values.
     fn new(
-        name: &str,
+        name: String,
         db_type: &'static DbType,
         max_size: usize,
+        precision: u8,
+        scale: i8,
+        nullable: bool,
         is_array: bool,
     ) -> Self {
         let actual_max_size: u32 = if max_size == 0 {
@@ -70,17 +86,18 @@ impl Metadata {
             max_size.try_into().unwrap()
         };
         Self {
-            name: name.into(),
+            name,
             db_type,
-            nullable: false,
+            nullable,
             null_by_describe: false,
-            precision: 0,
-            scale: 0,
+            precision,
+            scale,
             max_size: actual_max_size,
             is_array,
             vector_storage_format: None,
             vector_dimensions: 0,
             vector_flags: 0,
+            object_type: None,
         }
     }
 
@@ -115,6 +132,7 @@ impl Metadata {
             vector_storage_format: None,
             vector_dimensions: 0,
             vector_flags: 0,
+            object_type: None,
         };
         let ora_type_num: u16 = resp.read_u8()?.into();
         resp.read_u8()?; // flags
@@ -140,8 +158,15 @@ impl Metadata {
         metadata.nullable = resp.read_u8()? != 0;
         let _v7_name_length = resp.read_u8()?;
         metadata.name = resp.read_utf8_with_double_length()?.to_string();
-        let _obj_schema = resp.read_utf8_with_double_length()?;
-        let _obj_name = resp.read_utf8_with_double_length()?;
+        let obj_schema = resp.read_utf8_with_double_length()?.into_owned();
+        let obj_name = resp.read_utf8_with_double_length()?.into_owned();
+        if metadata.db_type == crate::DB_TYPE_OBJECT {
+            metadata.set_object_type_identity(DbObjectTypeIdentity {
+                schema: obj_schema,
+                package_name: None,
+                name: obj_name,
+            });
+        }
         let _column_position = resp.read_ub2()?;
         let _uds_flags = resp.read_ub4()?;
         if client.supports_ttc_field_version(constants::TTC_FIELD_VERSION_23_1)
@@ -180,13 +205,32 @@ impl Metadata {
         self.null_by_describe
     }
 
+    /// Creates metadata for an object attribute or collection element.
+    pub(crate) fn new_object_field(
+        name: String,
+        db_type: &'static DbType,
+        max_size: u32,
+        precision: u8,
+        scale: i8,
+    ) -> Self {
+        Self::new(
+            name,
+            db_type,
+            max_size as usize,
+            precision,
+            scale,
+            true,
+            false,
+        )
+    }
+
     /// Returns a new scalar with the given type and maximum size.
     pub(crate) fn new_scalar(
         name: &str,
         db_type: &'static DbType,
         max_size: usize,
-    ) -> Metadata {
-        Metadata::new(name, db_type, max_size, false)
+    ) -> Self {
+        Self::new(name.into(), db_type, max_size, 0, 0, false, false)
     }
 
     /// Returns a boolean indicating if the metadata requires a define. This is
@@ -203,9 +247,63 @@ impl Metadata {
         )
     }
 
+    /// Replaces a pending identity with its discovered object type.
+    pub(crate) fn resolve_object_type(
+        &mut self,
+        lookup: impl FnOnce(
+            &DbObjectTypeIdentity,
+        ) -> Result<Arc<DbObjectType>, Error>,
+    ) -> Result<(), Error> {
+        if let Some(MetadataObjectType::Pending(identity)) = &self.object_type
+        {
+            self.object_type =
+                Some(MetadataObjectType::Resolved(lookup(identity)?));
+        }
+        Ok(())
+    }
+
     /// Sets the flag indicating that the structure refers to an array.
     pub(crate) fn set_is_array(&mut self, is_array: bool) {
         self.is_array = is_array;
+    }
+
+    /// Updates object field details while preserving its name and other
+    /// metadata.
+    pub(crate) fn set_object_field_details(
+        &mut self,
+        db_type: &'static DbType,
+        max_size: u32,
+        precision: u8,
+        scale: i8,
+    ) {
+        self.db_type = db_type;
+        self.max_size = if max_size == 0 {
+            db_type.default_size
+        } else {
+            max_size
+        };
+        self.precision = precision;
+        self.scale = scale;
+    }
+
+    /// Attaches the shared object type handle.
+    pub(crate) fn set_object_type(&mut self, typ: Arc<DbObjectType>) {
+        self.object_type = Some(MetadataObjectType::Resolved(typ));
+    }
+
+    /// Records a pending object type, treating SYS.XMLTYPE as a scalar
+    /// datatype.
+    pub(crate) fn set_object_type_identity(
+        &mut self,
+        identity: DbObjectTypeIdentity,
+    ) {
+        if identity.is_xmltype() {
+            self.db_type = crate::DB_TYPE_XMLTYPE;
+            self.object_type = None;
+        } else {
+            self.db_type = crate::DB_TYPE_OBJECT;
+            self.object_type = Some(MetadataObjectType::Pending(identity));
+        }
     }
 
     /// Returns whether any values retrieved by the database need to go into
@@ -248,8 +346,13 @@ impl Metadata {
         buf.write_ub4(self.buffer_size());
         buf.write_ub4(0); // max number of elements
         buf.write_ub8(cont_flag);
-        buf.write_ub4(0); // OID
-        buf.write_ub2(0); // version
+        if let Some(MetadataObjectType::Resolved(typ)) = &self.object_type {
+            buf.write_bytes_with_double_length(Some(typ.oid()));
+            buf.write_ub4(typ.version().into());
+        } else {
+            buf.write_ub4(0); // OID
+            buf.write_ub2(0); // version
+        }
         if self.db_type.csfrm != 0 {
             buf.write_ub2(constants::CHARSET_ID_UTF8);
         } else {
@@ -352,6 +455,20 @@ impl Metadata {
     /// Returns whether the data allows nulls or not.
     pub fn nullable(&self) -> bool {
         self.nullable
+    }
+
+    /// Returns the database object type, or None for a field without a
+    /// database object type. An error is raised if discovery is incomplete.
+    pub fn object_type(&self) -> Result<Option<Arc<DbObjectType>>, Error> {
+        match &self.object_type {
+            Some(MetadataObjectType::Resolved(typ)) => {
+                Ok(Some(Arc::clone(typ)))
+            }
+            Some(MetadataObjectType::Pending(_)) => {
+                Err(Error::db_object_type_unavailable())
+            }
+            None => Ok(None),
+        }
     }
 
     /// Returns the precision of the data. This is used for the precision of

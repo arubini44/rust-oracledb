@@ -163,7 +163,7 @@ fn test_2602(conn: oracledb::Connection) -> Result<(), oracledb::Error> {
 
     let columns = cursor.columns();
     assert_column(&columns[0], "CURSOR_COL", oracledb::DB_TYPE_CURSOR);
-    assert_column(&columns[1], "XML_COL", oracledb::DB_TYPE_OBJECT);
+    assert_column(&columns[1], "XML_COL", oracledb::DB_TYPE_XMLTYPE);
     Ok(())
 }
 

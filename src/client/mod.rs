@@ -34,6 +34,7 @@ mod capabilities;
 use std::mem;
 use std::net::SocketAddr;
 use std::net::TcpStream;
+use std::sync::Arc;
 
 use crate::bind_params::BindParameters;
 use crate::config::Address;
@@ -42,6 +43,7 @@ use crate::config::Description;
 use crate::config::parse_redirect_data;
 use crate::constants;
 use crate::db_info::DbInfo;
+use crate::dbobject::DbObjectTypeCache;
 use crate::end_user_security_context::EndUserSecurityContext;
 use crate::error::Error;
 use crate::messages::AuthMessage;
@@ -60,6 +62,7 @@ use crate::messages::RollbackMessage;
 use crate::packet::Packet;
 use crate::response::Response;
 use crate::row::DbRow;
+use crate::row::Row;
 use crate::statement::CachedStatement;
 use crate::statement::StatementCache;
 use crate::statement::StatementOptions;
@@ -76,6 +79,7 @@ pub struct Client {
     caps: capabilities::Capabilities,
     config: Config,
     combo_key: Option<[u8; 32]>,
+    dbobject_type_cache: DbObjectTypeCache,
     charset_id: u16,
     ncharset_id: u16,
     statement_cache: StatementCache,
@@ -578,6 +582,7 @@ impl Client {
 
     /// Closes the connection to the database.
     pub(crate) fn close(&mut self) -> Result<(), Error> {
+        self.dbobject_type_cache.clear();
         self.end_request()?;
         self.process_message(&mut LogoffMessage::new())?;
         self.send_message(&mut EofMessage::new())?;
@@ -751,6 +756,9 @@ impl Client {
             let mut message =
                 ExecuteMessage::new(statement, params, parse_only);
             let mut response = self.process_message(&mut message)?;
+            response
+                .resolve_object_types(self, client_ref, Some(statement))
+                .inspect_err(|_| response.cleanup_pending_values(self))?;
             response.finalize_rows(client_ref, statement.out_metadata());
             if statement.requires_define() {
                 statement.clear_requires_define();
@@ -768,8 +776,34 @@ impl Client {
     ) -> Result<Response, Error> {
         let mut message = FetchMessage::new(statement, last_row);
         let mut response = self.process_message(&mut message)?;
+        response
+            .resolve_object_types(self, client_ref, None)
+            .inspect_err(|_| response.cleanup_pending_values(self))?;
         response.finalize_rows(client_ref, statement.out_metadata());
         Ok(response)
+    }
+
+    /// Fetches all rows from the database given the initial response returned
+    /// for the execute (or an empty response if using a REF cursor).
+    pub(crate) fn fetch_all_rows(
+        &mut self,
+        client_ref: &ClientRef,
+        statement: &CachedStatement,
+        mut response: Response,
+    ) -> Result<Vec<Row>, Error> {
+        let metadata = Arc::new(statement.out_metadata().to_vec());
+        let mut all_rows = Vec::new();
+        loop {
+            let rows = response.take_rows().unwrap_or_default();
+            let last_row = rows.last().cloned();
+            all_rows
+                .extend(rows.into_iter().map(|row| Row::new(&metadata, row)));
+            if response.is_end_of_fetch() {
+                break;
+            }
+            response = self.fetch(statement, client_ref, last_row)?;
+        }
+        Ok(all_rows)
     }
 
     /// Returns the call timeout set on the connection or an error if the
@@ -819,6 +853,20 @@ impl Client {
         Ok(info)
     }
 
+    /// Discovers a named object type while holding the client lock.
+    pub(crate) fn get_type(
+        &mut self,
+        client_ref: &ClientRef,
+        name: &str,
+    ) -> Result<Arc<crate::DbObjectType>, Error> {
+        // Discovery needs both mutable cache access and the locked client for
+        // SQL.
+        let mut cache = mem::take(&mut self.dbobject_type_cache);
+        let result = cache.get_type(self, client_ref, name);
+        self.dbobject_type_cache = cache;
+        result
+    }
+
     /// Returns the maximum string size for the database.
     pub(crate) fn max_string_size(&self) -> u32 {
         self.caps.max_string_size()
@@ -832,6 +880,7 @@ impl Client {
             caps: Capabilities::new(),
             config,
             combo_key: None,
+            dbobject_type_cache: DbObjectTypeCache::default(),
             charset_id: 0,
             ncharset_id: 0,
             statement_cache: StatementCache::new(cache_size),

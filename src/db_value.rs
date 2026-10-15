@@ -140,7 +140,8 @@ impl DbValue {
             constants::ORA_TYPE_NUM_INTERVAL_YM => Ok(resp
                 .read_value::<OracleIntervalYM>()?
                 .map(DbValue::IntervalYM)),
-            constants::ORA_TYPE_NUM_NUMBER => {
+            constants::ORA_TYPE_NUM_BINARY_INTEGER
+            | constants::ORA_TYPE_NUM_NUMBER => {
                 Ok(resp.read_value::<OracleNumber>()?.map(DbValue::Number))
             }
             constants::ORA_TYPE_NUM_CHAR

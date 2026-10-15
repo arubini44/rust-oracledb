@@ -30,6 +30,7 @@
 // and for pooling connections.
 //-----------------------------------------------------------------------------
 
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -40,6 +41,7 @@ use crate::cursor::Cursor;
 use crate::db_info::DbInfo;
 use crate::db_type::DbType;
 use crate::db_value::ToDbValue;
+use crate::dbobject::DbObjectType;
 use crate::end_user_security_context::EndUserSecurityContext;
 use crate::error::Error;
 use crate::exec_result::ExecBatchResult;
@@ -128,6 +130,14 @@ impl ConnImpl {
         } else {
             ConnImplStatus::Healthy
         }
+    }
+
+    /// Returns the named database object type.
+    pub(crate) fn get_type(
+        &self,
+        name: &str,
+    ) -> Result<Arc<DbObjectType>, Error> {
+        self.client_ref.lock()?.get_type(&self.client_ref, name)
     }
 
     /// Sets Deep Data Security state on the underlying client/session.

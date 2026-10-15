@@ -45,6 +45,7 @@ pub enum ErrorKind {
     CallTimeoutExceeded,
     ColumnTruncated(usize, usize),
     DbError(DbError),
+    DbObjectTypeUnavailable,
     DeadConnection,
     DifferentTypes(&'static DbType, &'static DbType),
     EndUserSecurityContextRequiresTcps,
@@ -54,6 +55,7 @@ pub enum ErrorKind {
     InvalidColumnIndex(usize),
     InvalidColumnName(String),
     InvalidConnectString(String, String),
+    InvalidDbObjectTypeName(String),
     InvalidDescriptorNode(String, String),
     InvalidEncodedString,
     InvalidEncodedVector,
@@ -100,8 +102,10 @@ pub enum ErrorKind {
     UnsupportedConversion(String, String),
     UnsupportedDbType(&'static DbType),
     UnsupportedDeepDataSecurityFeature,
+    UnsupportedObjectMetadataType(String),
     UnsupportedOsonNodeType(u8),
     UnsupportedOsonVersion(u8),
+    UnsupportedTdsType(u8),
     UnsupportedVectorFormat(u8),
     UnsupportedVectorVersion(u8),
     ValueWasNull,
@@ -202,6 +206,9 @@ impl fmt::Display for Error {
                  Untruncated was {actual_size} bytes."
             )?,
             ErrorKind::DbError(db_error) => fmt.write_str(db_error.message())?,
+            ErrorKind::DbObjectTypeUnavailable => {
+                fmt.write_str("database object type is no longer available")?
+            }
             ErrorKind::DeadConnection => {
                 fmt.write_str("the database or network closed the connection")?
             }
@@ -242,6 +249,9 @@ impl fmt::Display for Error {
             }
             ErrorKind::InvalidConnectString(connect_string, reason) => {
                 write!(fmt, "invalid connect string: {connect_string}: {reason}")?
+            }
+            ErrorKind::InvalidDbObjectTypeName(name) => {
+                write!(fmt, "{name} is not a valid object type name")?
             }
             ErrorKind::InvalidDescriptorNode(key, expected_type) => write!(
                 fmt,
@@ -409,11 +419,17 @@ impl fmt::Display for Error {
             ErrorKind::UnsupportedDeepDataSecurityFeature => fmt.write_str(
                 "database does not support the Oracle Deep Data Security feature",
             )?,
+            ErrorKind::UnsupportedObjectMetadataType(name) => write!(
+                fmt, "datatype {name} is not supported in object metadata"
+            )?,
             ErrorKind::UnsupportedOsonNodeType(node_type) => {
                 write!(fmt, "unsupported OSON node type {node_type}")?
             }
             ErrorKind::UnsupportedOsonVersion(version) => {
                 write!(fmt, "unsupported OSON version {version}")?
+            }
+            ErrorKind::UnsupportedTdsType(code) => {
+                write!(fmt, "TDS type code {code} is not supported")?
             }
             ErrorKind::UnsupportedVectorFormat(vector_format) => {
                 write!(fmt, "unsupported vector format {}", vector_format)?
@@ -476,6 +492,11 @@ impl Error {
 
     pub(crate) fn db_error(db_error: DbError) -> Error {
         Error::new(ErrorKind::DbError(db_error), None)
+    }
+
+    /// Returns an error for a nested type whose last strong owner was dropped.
+    pub(crate) fn db_object_type_unavailable() -> Error {
+        Error::new(ErrorKind::DbObjectTypeUnavailable, None)
     }
 
     pub(crate) fn dead_connection() -> Error {
@@ -541,6 +562,11 @@ impl Error {
             ),
             None,
         )
+    }
+
+    /// Creates an error for a name that does not identify a database object type.
+    pub(crate) fn invalid_db_object_type_name(name: &str) -> Error {
+        Error::new(ErrorKind::InvalidDbObjectTypeName(name.to_string()), None)
     }
 
     pub(crate) fn invalid_descriptor_node(
@@ -789,12 +815,25 @@ impl Error {
         Error::new(ErrorKind::UnsupportedDeepDataSecurityFeature, None)
     }
 
+    /// Creates an error for an unsupported dictionary datatype name.
+    pub(crate) fn unsupported_object_metadata_type(name: &str) -> Error {
+        Error::new(
+            ErrorKind::UnsupportedObjectMetadataType(name.to_string()),
+            None,
+        )
+    }
+
     pub(crate) fn unsupported_oson_node_type(node_type: u8) -> Error {
         Error::new(ErrorKind::UnsupportedOsonNodeType(node_type), None)
     }
 
     pub(crate) fn unsupported_oson_version(version: u8) -> Error {
         Error::new(ErrorKind::UnsupportedOsonVersion(version), None)
+    }
+
+    /// Creates an error for an unsupported type descriptor code.
+    pub(crate) fn unsupported_tds_type(code: u8) -> Error {
+        Error::new(ErrorKind::UnsupportedTdsType(code), None)
     }
 
     pub(crate) fn unsupported_vector_format(vector_format: u8) -> Error {

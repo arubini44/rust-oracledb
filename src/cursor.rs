@@ -35,7 +35,7 @@ use crate::error::Error;
 use crate::metadata::Metadata;
 use crate::response::Response;
 use crate::row::{DbRow, Row};
-use crate::statement::Statement;
+use crate::statement::{CachedStatement, Statement};
 
 /// Represents a set of rows retrieved from the database by calling
 /// [Connection::query()](`crate::Connection::query`) or
@@ -65,6 +65,12 @@ impl Cursor {
         } else {
             self.rows.clear();
         }
+    }
+
+    /// Transfers the statement for internal fetching, discarding buffered
+    /// rows.
+    pub(crate) fn into_cached_statement(self) -> CachedStatement {
+        self.statement.into_cached_statement()
     }
 
     /// Creates a new cursor.

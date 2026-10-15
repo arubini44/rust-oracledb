@@ -28,6 +28,41 @@
 
 use rstest::*;
 
+pub struct PackageGuard<'a> {
+    conn: &'a oracledb::Connection,
+    name: &'a str,
+}
+
+impl<'a> PackageGuard<'a> {
+    /// Creates the package with the given definition.
+    fn create_package(&self, definition: &str) -> Result<(), oracledb::Error> {
+        let sql =
+            format!("create package {} as {} end;", self.name, definition);
+        self.conn.execute(&sql, &[])?;
+        Ok(())
+    }
+
+    /// Drops the package from the database but ignores the error if the
+    /// package does not exist.
+    fn drop_package(&self) -> Result<(), oracledb::Error> {
+        let sql = format!("drop package {}", self.name);
+        let result = self.conn.execute(&sql, &[]);
+        if let Err(err) = result
+            && let oracledb::ErrorKind::DbError(db_error) = err.kind()
+            && db_error.code() != 4043
+        {
+            return Err(err);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for PackageGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.drop_package();
+    }
+}
+
 pub struct TableGuard<'a> {
     conn: &'a oracledb::Connection,
     table_name: &'a str,
@@ -69,6 +104,40 @@ impl Drop for TableGuard<'_> {
     }
 }
 
+pub struct TypeGuard<'a> {
+    conn: &'a oracledb::Connection,
+    type_name: &'a str,
+}
+
+impl<'a> TypeGuard<'a> {
+    /// Creates the type with the given definition.
+    fn create_type(&self, definition: &str) -> Result<(), oracledb::Error> {
+        let sql = format!("create type {} as {}", self.type_name, definition);
+        self.conn.execute(&sql, &[])?;
+        Ok(())
+    }
+
+    /// Drops the type from the database but ignores the error if the type
+    /// does not exist.
+    fn drop_type(&self) -> Result<(), oracledb::Error> {
+        let sql = format!("drop type {} force", self.type_name);
+        let result = self.conn.execute(&sql, &[]);
+        if let Err(err) = result
+            && let oracledb::ErrorKind::DbError(db_error) = err.kind()
+            && db_error.code() != 4043
+        {
+            return Err(err);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for TypeGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.drop_type();
+    }
+}
+
 /// Returns a boolean indicating if the database to which the connection has
 /// been established is at the specified minimum version.
 fn is_db_min_version(
@@ -93,6 +162,19 @@ pub fn conn() -> oracledb::Connection {
 }
 
 #[allow(dead_code)]
+/// Creates the package with the given name and definition.
+pub fn create_package<'a>(
+    conn: &'a oracledb::Connection,
+    name: &'a str,
+    definition: &str,
+) -> Result<PackageGuard<'a>, oracledb::Error> {
+    let guard = PackageGuard { conn, name };
+    guard.drop_package()?;
+    guard.create_package(definition)?;
+    Ok(guard)
+}
+
+#[allow(dead_code)]
 /// Creates the table with the given name and definition.
 pub fn create_table<'a>(
     conn: &'a oracledb::Connection,
@@ -113,6 +195,19 @@ pub fn create_table_with_options<'a>(
     let guard = TableGuard { conn, table_name };
     guard.drop_table()?;
     guard.create_table(definition, options)?;
+    Ok(guard)
+}
+
+#[allow(dead_code)]
+/// Creates the type with the given name and definition.
+pub fn create_type<'a>(
+    conn: &'a oracledb::Connection,
+    type_name: &'a str,
+    definition: &str,
+) -> Result<TypeGuard<'a>, oracledb::Error> {
+    let guard = TypeGuard { conn, type_name };
+    guard.drop_type()?;
+    guard.create_type(definition)?;
     Ok(guard)
 }
 

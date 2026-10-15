@@ -564,6 +564,30 @@ impl Response {
         self.buf.read_utf8_with_length()
     }
 
+    /// Resolves object types in the supplied statement and pending REF cursors.
+    pub(crate) fn resolve_object_types(
+        &mut self,
+        client: &mut Client,
+        client_ref: &ClientRef,
+        statement: Option<&mut CachedStatement>,
+    ) -> Result<(), Error> {
+        let cursors =
+            self.pending_values
+                .iter_mut()
+                .filter_map(|value| match value {
+                    Some(PendingDbValue::Cursor(statement)) => Some(statement),
+                    _ => None,
+                });
+        for statement in statement.into_iter().chain(cursors) {
+            for metadata in statement.out_metadata_mut() {
+                metadata.resolve_object_type(|identity| {
+                    client.get_type(client_ref, &identity.lookup_name())
+                })?;
+            }
+        }
+        Ok(())
+    }
+
     /// Specifies that the response requires out binds to be flushed. The
     /// packet data is cleared as well since the real response comes after the
     /// flush out binds packet is sent!
