@@ -53,7 +53,8 @@ impl Cursor {
     /// Fetches more rows from the database.
     fn get_more_rows(&mut self) -> Result<(), Error> {
         let last_row = self.last_row.take();
-        self.set_from_response(self.statement.fetch(last_row)?);
+        let response = self.statement.fetch(last_row)?;
+        self.set_from_response(response);
         Ok(())
     }
 

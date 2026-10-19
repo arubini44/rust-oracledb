@@ -589,6 +589,13 @@ impl Client {
         self.transport.close()
     }
 
+    /// Ensures that a statement is closed and the cursor number cleared for
+    /// errors that require it.
+    pub(crate) fn close_cursor(&mut self, statement: &mut CachedStatement) {
+        self.statement_cache.close_cursor(statement);
+        statement.clear_cursor();
+    }
+
     /// Returns the configuration associated with the client.
     pub(crate) fn config(&self) -> &Config {
         &self.config
@@ -770,7 +777,7 @@ impl Client {
     /// Performs a fetch and returns the database response.
     pub(crate) fn fetch(
         &mut self,
-        statement: &CachedStatement,
+        statement: &mut CachedStatement,
         client_ref: &ClientRef,
         last_row: Option<DbRow>,
     ) -> Result<Response, Error> {
@@ -788,7 +795,7 @@ impl Client {
     pub(crate) fn fetch_all_rows(
         &mut self,
         client_ref: &ClientRef,
-        statement: &CachedStatement,
+        statement: &mut CachedStatement,
         mut response: Response,
     ) -> Result<Vec<Row>, Error> {
         let metadata = Arc::new(statement.out_metadata().to_vec());

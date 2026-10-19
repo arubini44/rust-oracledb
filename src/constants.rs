@@ -149,10 +149,18 @@ pub const PROTOCOL_VERSION_18: u16 = 318;
 pub const PROTOCOL_VERSION_23: u16 = 319;
 
 // database error constants
-pub const DB_ERR_NUM_NO_DATA_FOUND: usize = 1403;
+pub const DB_ERR_NUM_CANNOT_INSERT_NULL: usize = 1400;
+pub const DB_ERR_NUM_CHECK_CONSTRAINT_VIOLATED: usize = 2290;
+pub const DB_ERR_NUM_CHILD_RECORD_FOUND: usize = 2292;
+pub const DB_ERR_NUM_DBOBJECT_CONSTRAINT_VIOLATED: usize = 21525;
 pub const DB_ERR_NUM_INVALID_SERVICE_NAME: usize = 12514;
 pub const DB_ERR_NUM_INVALID_SID: usize = 12505;
+pub const DB_ERR_NUM_JSON_SERIALIZER_ERROR: usize = 40479;
+pub const DB_ERR_NUM_NO_DATA_FOUND: usize = 1403;
+pub const DB_ERR_NUM_PARENT_KEY_NOT_FOUND: usize = 2291;
 pub const DB_ERR_NUM_SESSION_SHUTDOWN: usize = 12572;
+pub const DB_ERR_NUM_UNIQUE_CONSTRAINT_VIOLATED: usize = 1;
+pub const DB_ERR_NUM_VALUE_LARGER_THAN_PRECISION: usize = 1438;
 
 // TTC field version constants
 pub const _TTC_FIELD_VERSION_11_2: u8 = 6;

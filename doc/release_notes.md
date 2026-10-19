@@ -14,6 +14,9 @@
     ([issue 33](https://github.com/oracle/rust-oracledb/issues/33)).
 1.  Fixed issue with encoding integers with trailing zeros
     ([issue 37](https://github.com/oracle/rust-oracledb/issues/37)).
+1.  Fixed bug preventing statement from being re-parsed on a second attempt
+    when errors take place on the first attempt
+    ([issue 51](https://github.com/oracle/rust-oracledb/issues/51)).
 1.  Fixed bug that would cause the maximum SDU specified in all descriptions to
     be used instead of the one specified for each individual description.
 

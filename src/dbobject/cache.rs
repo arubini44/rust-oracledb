@@ -245,7 +245,7 @@ fn execute_named_rows(
         statement.check_binds(&params)?;
         let response =
             client.execute(&mut statement, client_ref, params, false)?;
-        client.fetch_all_rows(client_ref, &statement, response)
+        client.fetch_all_rows(client_ref, &mut statement, response)
     })();
     client.return_statement(&statement);
     result
@@ -429,7 +429,7 @@ fn lookup_type(
             lookup_row_type_attrs(client, client_ref, &identity)?
         } else {
             let cursor_statement = cursor_statement
-                .as_ref()
+                .as_mut()
                 .ok_or_else(Error::unexpected_result)?;
             let rows = client.fetch_all_rows(
                 client_ref,

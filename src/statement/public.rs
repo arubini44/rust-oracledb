@@ -55,11 +55,11 @@ pub struct Statement {
 impl Statement {
     /// Gets the response to a fetch.
     pub(crate) fn fetch(
-        &self,
+        &mut self,
         last_row: Option<DbRow>,
     ) -> Result<Response, Error> {
         self.client_ref.lock()?.fetch(
-            &self.statement,
+            &mut self.statement,
             &self.client_ref,
             last_row,
         )

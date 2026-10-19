@@ -763,3 +763,19 @@ fn test_2726(conn: oracledb::Connection) -> Result<(), oracledb::Error> {
     assert_eq!(fetched_values, vec![100, 200, 300, 400, 500]);
     Ok(())
 }
+
+#[rstest]
+/// Tests re-execution of statements with an error.
+fn test_2727(conn: oracledb::Connection) -> Result<(), oracledb::Error> {
+    let sql = "select * from test_2727";
+    match conn.query(sql, &[]) {
+        Ok(_) => panic!("expected failure"),
+        Err(error) => {
+            assert!(matches!(error.kind(), oracledb::ErrorKind::DbError(_)));
+        }
+    };
+    let _guard =
+        common::create_table(&conn, "test_2727", "data varchar2(30)")?;
+    let _ = conn.query(sql, &[])?;
+    Ok(())
+}

@@ -116,31 +116,36 @@ impl Response {
         self.call_status
     }
 
-    /// Checks to see if any error has taken place and if so, returns it. The
-    /// error "no data found" when found for a query is ignored and the end of
-    /// fetch marker is set instead.
-    pub(crate) fn check_for_end_of_fetch(
+    /// Checks to see if any error has taken place and, if so, returns it.
+    pub(crate) fn check_for_error(&mut self) -> Result<(), Error> {
+        self.take_db_error()
+            .map_or(Ok(()), |e| Err(Error::db_error(e)))
+    }
+
+    /// Checks to see if any error has taken place after executing a statement
+    /// or fetching rows from a cursor, and if so, returns it. The error "no
+    /// data found" when found for a query is ignored and the end of fetch
+    /// marker is set instead.
+    pub(crate) fn check_for_statement_error(
         &mut self,
-        statement: &CachedStatement,
+        client: &mut Client,
+        statement: &mut CachedStatement,
     ) -> Result<(), Error> {
         if let Some(db_error) = self.take_db_error() {
+            if db_error.should_close_cursor() {
+                client.close_cursor(statement);
+            }
             if statement.is_query()
                 && db_error.code() == constants::DB_ERR_NUM_NO_DATA_FOUND
             {
                 self.end_of_fetch = true;
                 Ok(())
             } else {
-                Err(Error::db_error(db_error.clone()))
+                Err(Error::db_error(db_error))
             }
         } else {
             Ok(())
         }
-    }
-
-    /// Checks to see if any error has taken place and, if so, returns it.
-    pub(crate) fn check_for_error(&mut self) -> Result<(), Error> {
-        self.take_db_error()
-            .map_or(Ok(()), |e| Err(Error::db_error(e)))
     }
 
     /// Queues resources created before response deserialization failed.
