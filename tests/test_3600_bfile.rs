@@ -32,14 +32,12 @@ use common::conn;
 use rstest::*;
 use std::io::{Read, Write};
 
-/// Owns the server files and database directory used by one BFILE test.
+/// Owns the server files used by one BFILE test in a configured directory.
 struct BfileFixture {
     conn: oracledb::Connection,
-    admin_conn: oracledb::Connection,
     directory: String,
     file_prefix: String,
     files: Vec<String>,
-    directory_created: bool,
 }
 
 impl BfileFixture {
@@ -52,38 +50,18 @@ impl BfileFixture {
         row.take(0)
     }
 
-    fn new(directory: &str) -> Result<Option<Self>, oracledb::Error> {
-        let Ok(path) = std::env::var("RSO_TEST_BFILE_SERVER_PATH") else {
-            common::skip_test("requires RSO_TEST_BFILE_SERVER_PATH");
-            return Ok(None);
+    fn new() -> Option<Self> {
+        let Ok(directory) = std::env::var("RSO_TEST_DIRECTORY_NAME") else {
+            common::skip_test("requires RSO_TEST_DIRECTORY_NAME");
+            return None;
         };
 
-        let config = oracledb::get_test_config();
-        let conn = common::conn();
-        let admin_conn = oracledb::connect(config.admin_config.clone())?;
-        let directory = directory.to_string();
-        let mut fixture = Self {
-            conn,
-            admin_conn,
+        Some(Self {
+            conn: common::conn(),
             directory,
             file_prefix: format!("rso-bfile-{}", uuid::Uuid::new_v4()),
             files: Vec::new(),
-            directory_created: false,
-        };
-        let path = path.replace('\'', "''");
-        fixture.admin_conn.execute(
-            &format!("create directory {} as '{path}'", fixture.directory),
-            &[],
-        )?;
-        fixture.directory_created = true;
-        fixture.admin_conn.execute(
-            &format!(
-                "grant read, write on directory {} to {}",
-                fixture.directory, config.user
-            ),
-            &[],
-        )?;
-        Ok(Some(fixture))
+        })
     }
 
     fn write_file(
@@ -123,11 +101,6 @@ impl Drop for BfileFixture {
                 "begin utl_file.fremove(:1, :2); end;",
                 &[&self.directory, filename],
             );
-        }
-        if self.directory_created {
-            let _ = self
-                .admin_conn
-                .execute(&format!("drop directory {}", self.directory), &[]);
         }
     }
 }
@@ -185,7 +158,7 @@ fn test_3601(conn: oracledb::Connection) -> Result<(), oracledb::Error> {
 /// Tests BFILE operations using a file populated with known data.
 #[test]
 fn test_3602() -> Result<(), oracledb::Error> {
-    let Some(mut fixture) = BfileFixture::new("RSO_BFILE_3602")? else {
+    let Some(mut fixture) = BfileFixture::new() else {
         return Ok(());
     };
     // Includes every byte value and spans multiple 17-byte reads.
@@ -225,7 +198,7 @@ fn test_3602() -> Result<(), oracledb::Error> {
 /// An empty server file exists and reads as an empty byte stream.
 #[test]
 fn test_3603() -> Result<(), oracledb::Error> {
-    let Some(mut fixture) = BfileFixture::new("RSO_BFILE_3603")? else {
+    let Some(mut fixture) = BfileFixture::new() else {
         return Ok(());
     };
     fixture.write_file("empty.bin", &[])?;
@@ -242,7 +215,7 @@ fn test_3603() -> Result<(), oracledb::Error> {
 /// A missing file in a valid server directory does not exist and cannot be read.
 #[test]
 fn test_3604() -> Result<(), oracledb::Error> {
-    let Some(fixture) = BfileFixture::new("RSO_BFILE_3604")? else {
+    let Some(fixture) = BfileFixture::new() else {
         return Ok(());
     };
     let mut lob = fixture.fetch("missing.bin")?;
